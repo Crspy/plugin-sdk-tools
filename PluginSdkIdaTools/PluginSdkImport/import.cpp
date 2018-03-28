@@ -60,6 +60,7 @@ json jsonReadFromFile(qstring const &path) {
 }
 
 void importdb(int selectedGame, unsigned short selectedVersion, unsigned short options, path const &input) {
+    msg("--------------------\nImport started\n--------------------\n");
     if (selectedGame == -1) {
         warning("Can't detect game version");
         return;
@@ -163,11 +164,17 @@ void importdb(int selectedGame, unsigned short selectedVersion, unsigned short o
                                     enFullMemberComment += enMemberComment;
                                 }
                                 if (!enFullMemberComment.empty()) {
-                                    enum_member_comment_info commentInfo;
-                                    commentInfo.memberName = enMemberName;
-                                    commentInfo.comment = enFullMemberComment;
-                                    commentInfo.used = false;
-                                    enumMemberComments.push_back(commentInfo);
+                                    const_t enumMember = get_enum_member_by_name(enMemberName.c_str());
+                                    if (enumMember != static_cast<const_t>(-1)) {
+                                        if (!set_enum_member_cmt(enumMember, enFullMemberComment.c_str(), false)) {
+                                            msg("Comment for enum member '%s' in enum '%s' was not set\n",
+                                                enMemberName.c_str(), enumName.c_str());
+                                        }
+                                    }
+                                    else {
+                                        msg("Unable to retrive reference for enum member '%s' (in enum '%s')\n",
+                                            enMemberName.c_str(), enumName.c_str());
+                                    }
                                 }
                             }
                             else {
@@ -190,8 +197,7 @@ void importdb(int selectedGame, unsigned short selectedVersion, unsigned short o
                                 }
                                 for (auto &cm : m_comments) {
                                     if (!cm.used) {
-                                        msg("Comment for enum member '%s' in enum '%s' was not set\n",
-                                            cm.memberName.c_str(), m_enumName.c_str());
+                                        
                                     }
                                 }
                                 return 0;
@@ -224,6 +230,11 @@ void importdb(int selectedGame, unsigned short selectedVersion, unsigned short o
                 json j = jsonReadFromFile(p.path().string().c_str());
                 qstring structName = jsonReadString(j, "name");
                 if (!structName.empty()) {
+                    auto stid = get_struc_id(structName.c_str());
+                    if (stid != BADNODE && isSystemStruct(structName)) {
+                        msg("Note: system struct '%s' was ignored\n", structName.c_str());
+                        continue;
+                    }
                     Struct entry;
                     entry.m_name = structName;
                     // find struct kind
@@ -250,6 +261,7 @@ void importdb(int selectedGame, unsigned short selectedVersion, unsigned short o
                             m.m_rawType = jsonReadString(jm, "rawType");
                             m.m_offset = jsonReadNumber(jm, "offset");
                             m.m_size = jsonReadNumber(jm, "size");
+                            m.m_isString = jsonReadBool(jm, "isString");
                             m.m_isAnonymous = jsonReadBool(jm, "isAnonymous");
                             m.m_comment = jsonReadString(jm, "comment");
                             if (m.m_type.empty()) {
@@ -265,75 +277,84 @@ void importdb(int selectedGame, unsigned short selectedVersion, unsigned short o
                                     m.m_type += "]";
                                 }
                             }
-                            auto stid = get_struc_id(entry.m_name.c_str());
-                            struc_t *s = nullptr;
-                            if (stid != BADNODE) {
-                                s = get_struc(stid);
-                                auto strucsize = get_struc_size(stid);
-                                if (del_struc_members(s, 0, strucsize) != -1) {
-                                    // switch to/from union
-                                    if (s->is_union()) {
-                                        if (entry.m_kind != Struct::STRT_UNION)
-                                            setflag(s->props, SF_UNION, false);
-                                    }
-                                    else if (entry.m_kind == Struct::STRT_UNION)
-                                        setflag(s->props, SF_UNION, true);
-                                }
-                                else {
-                                    warning("Error: Unable to delete struct '%s' data", entry.m_name.c_str());
-                                    continue;
-                                }
-                            }
-                            else {
-                                stid = add_struc(-1, entry.m_name.c_str(), entry.m_kind == Struct::STRT_UNION);
-                                if (stid == BADNODE) {
-                                    // error : can't create struct!
-                                    warning("Error: Unable to create struct '%s'", entry.m_name.c_str());
-                                    continue;
-                                }
-                                s = get_struc(stid);
-                            }
-                            entry.m_idaStruct = s;
-                            entry.m_idaStructId = stid;
                             entry.m_members.push_back(m);
+                        }
+                    }
+                    struc_t *s = nullptr;
+                    if (stid != BADNODE) {
+                        s = get_struc(stid);
+                        auto strucsize = get_struc_size(stid);
+                        if (del_struc_members(s, 0, strucsize + 1) != -1) {
+                            // switch to/from union
+                            if (s->is_union()) {
+                                if (entry.m_kind != Struct::STRT_UNION)
+                                    setflag(s->props, SF_UNION, false);
+                            }
+                            else if (entry.m_kind == Struct::STRT_UNION)
+                                setflag(s->props, SF_UNION, true);
+                        }
+                        else {
+                            warning("Error: Unable to delete struct '%s' data", entry.m_name.c_str());
+                            continue;
+                        } 
+                    }
+                    else {
+                        stid = add_struc(-1, entry.m_name.c_str(), entry.m_kind == Struct::STRT_UNION);
+                        if (stid == BADNODE) {
+                            // error : can't create struct!
+                            warning("Error: Unable to create struct '%s'", entry.m_name.c_str());
+                            continue;
+                        }
+                        s = get_struc(stid);
+                    }
+                    entry.m_idaStruct = s;
+                    entry.m_idaStructId = stid;
 
-                            // set alignment
-                            set_struc_align(s, entry.m_alignment);
-                            // set comment
-                            qstring stFullCommentLine = "module:";
-                            stFullCommentLine += entry.m_module;
-                            if (!entry.m_scope.empty()) {
-                                stFullCommentLine += " scope:";
-                                stFullCommentLine += entry.m_scope;
-                            }
-                            if (entry.m_kind == Struct::STRT_STRUCT)
-                                stFullCommentLine += " isstruct:true";
-                            if (entry.m_isAnonymous)
-                                stFullCommentLine += " isanonymous:true";
-                            if (!entry.m_comment.empty()) {
-                                qstring stCommentLine = entry.m_comment;
-                                stCommentLine.replace(";;", "\n");
-                                stFullCommentLine += "\n"; // we added 'module:X' signature, so we can add a newline here
-                                stFullCommentLine += stCommentLine;
-                            }
-                            set_struc_cmt(stid, stFullCommentLine.c_str(), false);
-                            // create struct members
-                            for (auto const &m : entry.m_members) {
-                                if (add_struc_member(s, m.m_name.c_str(), m.m_offset, 0, nullptr, m.m_size) != STRUC_ERROR_MEMBER_OK) {
-                                    warning("Error: Unable to create struct member '%s' in struct '%s'", m.m_name.c_str(),
-                                        entry.m_name.c_str());
-                                }
-                            }
-                            // validate struct size
-                            auto newSize = get_struc_size(s);
-                            if (newSize < entry.m_size) {
-                                if (add_struc_member(s, format("_pad%X", newSize).c_str(), newSize, 0, nullptr,
-                                    entry.m_size - newSize) != STRUC_ERROR_MEMBER_OK)
-                                {
-                                    warning("Error: Unable to pad struct '%s' (at offset %d with %d bytes)", entry.m_name.c_str(),
-                                        newSize, entry.m_size - newSize);
-                                }
-                            }
+                    // set alignment
+                    set_struc_align(s, entry.m_alignment);
+                    // set comment
+                    qstring stFullCommentLine = "module:";
+                    stFullCommentLine += entry.m_module;
+                    if (!entry.m_scope.empty()) {
+                        stFullCommentLine += " scope:";
+                        stFullCommentLine += entry.m_scope;
+                    }
+                    if (entry.m_kind == Struct::STRT_STRUCT)
+                        stFullCommentLine += " isstruct:true";
+                    if (entry.m_isAnonymous)
+                        stFullCommentLine += " isanonymous:true";
+                    if (!entry.m_comment.empty()) {
+                        qstring stCommentLine = entry.m_comment;
+                        stCommentLine.replace(";;", "\n");
+                        stFullCommentLine += "\n"; // we added 'module:X' signature, so we can add a newline here
+                        stFullCommentLine += stCommentLine;
+                    }
+                    set_struc_cmt(stid, stFullCommentLine.c_str(), false);
+                    // create struct members
+
+                    for (auto const &m : entry.m_members) {
+                        flags_t mflags = 0;
+                        opinfo_t mtinfo;
+                        mtinfo.strtype = STRTYPE_C;
+                        opinfo_t *pmtinfo = nullptr;
+                        if (m.m_isString) {
+                            mflags = 0x50000400;
+                            pmtinfo = &mtinfo;
+                        }
+                        struc_error_t err = add_struc_member(s, m.m_name.c_str(), m.m_offset, mflags, pmtinfo, m.m_size);
+                        if (err != STRUC_ERROR_MEMBER_OK) {
+                            warning("Error: Unable to create struct member '%s' in struct '%s' (error %d)",
+                                m.m_name.c_str(), entry.m_name.c_str(), err);
+                        }
+                    }
+                    // validate struct size
+                    auto newSize = get_struc_size(s);
+                    if (newSize < entry.m_size) {
+                        if (add_struc_member(s, format("_pad%X", newSize).c_str(), newSize, 0, nullptr,
+                            entry.m_size - newSize) != STRUC_ERROR_MEMBER_OK)
+                        {
+                            warning("Error: Unable to pad struct '%s' (at offset %d with %d bytes)", entry.m_name.c_str(),
+                                newSize, entry.m_size - newSize);
                         }
                     }
                     structs.push_back(entry);
@@ -351,13 +372,20 @@ void importdb(int selectedGame, unsigned short selectedVersion, unsigned short o
             Struct &entry = structs[i];
             auto stid = entry.m_idaStructId;
             auto s = entry.m_idaStruct;
+            bool isUnion = entry.m_kind == Struct::Kind::STRT_UNION;
             for (auto const &m : entry.m_members) {
                 tinfo_t tif; qstring typeOut;
-                auto smem = get_member(s, m.m_offset);
+                member_t *smem;
+                if (isUnion)
+                    smem = get_member_by_name(s, m.m_name.c_str());
+                else
+                    smem = get_member(s, m.m_offset);
                 if (smem) {
-                    if (!setType(s, smem, m.m_offset, m.m_type)) {
-                        warning("Unable to set type for member '%s' ('%s') in struct '%s'",
-                            m.m_name.c_str(), m.m_type.c_str(), entry.m_name.c_str());
+                    if ((smem->flag & 0x50000000) != 0x50000000) {
+                        if(!setType(s, smem, m.m_offset, m.m_type)) {
+                            warning("Unable to set type for member '%s' ('%s') in struct '%s'",
+                                m.m_name.c_str(), m.m_type.c_str(), entry.m_name.c_str());
+                        }
                     }
                     // member comment
                     qstring stFullMemberComment;
@@ -425,21 +453,27 @@ void importdb(int selectedGame, unsigned short selectedVersion, unsigned short o
         // update ida variables
         for (size_t i = 0; i < variables.size(); i++) {
             Variable const &v = variables[i];
-            if (v.m_address != 0 && !v.m_type.empty()) {
+            if (v.m_address != 0) {
                 if (IsInRange(v.m_address, dataSegments)) {
-                    if (!del_items(v.m_address, DELIT_DELNAMES, v.m_size)) {
-                        msg("Unable to clear space for '%s' variable at address 0x%X (%d bytes)\n",
-                            v.m_demangledName.c_str(), v.m_address, v.m_size);
+                    if (!v.m_type.empty()) {
+                        if (!del_items(v.m_address, DELIT_DELNAMES, v.m_size)) {
+                            msg("Unable to clear space for '%s' variable at address 0x%X (%d bytes)\n",
+                                v.m_demangledName.c_str(), v.m_address, v.m_size);
+                        }
+                        for (unsigned int i = 0; i < v.m_size; i++)
+                            setType(v.m_address + i, "");
                     }
-                    for (unsigned int i = 0; i < v.m_size; i++)
-                        setType(v.m_address + i, "");
                     if (!set_name(v.m_address, v.m_name.c_str())) {
                         warning("Unable to set variable '%s' name at address 0x%X",
                             v.m_demangledName.c_str(), v.m_address);
                     }
-                    if (!setType(v.m_address, v.m_type)) {
-                        msg("Errors while setting variable '%s' type ('%s') at address 0x%X\n",
-                            v.m_demangledName.c_str(), v.m_type.c_str(), v.m_address);
+                    if (!v.m_type.empty()) {
+                        qstring fixedType = v.m_type;
+                        fixedType.replace("[]", "[1]");
+                        if (!setType(v.m_address, fixedType)) {
+                            msg("Errors while setting variable '%s' type ('%s') at address 0x%X\n",
+                                v.m_demangledName.c_str(), v.m_type.c_str(), v.m_address);
+                        }
                     }
                     qstring varFullComment = "module:";
                     varFullComment += v.m_module;

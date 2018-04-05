@@ -1,5 +1,5 @@
 #include "Type.h"
-#include "String.h"
+#include "StringEx.h"
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
@@ -288,6 +288,15 @@ vector<Token> GetTokens(string const &line) {
 
 string Type::GetFullType() const {
     return BeforeName() + AfterName();
+}
+
+string Type::GetFullTypeRemovePointer() {
+    string savedPtrs = mPointers;
+    if (mPointers.size() > 0)
+        mPointers.pop_back();
+    string result = GetFullType();
+    mPointers = savedPtrs;
+    return result;
 }
 
 bool Type::IsPointer() const {

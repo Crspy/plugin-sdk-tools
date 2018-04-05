@@ -39,7 +39,7 @@
     <IntDir>$(ProjectDir).obj\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='IDA 32-bit|x64'">
-    <OutDir>C:\Program Files\IDA 7.0\plugins\</OutDir>
+    <OutDir>D:\Repos\plugin-sdk-tools\PluginSdkIdaTools</OutDir>
     <IntDir>$(ProjectDir).obj\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='IDA 32-bit|x64'">

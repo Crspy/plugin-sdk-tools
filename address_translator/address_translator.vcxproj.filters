@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="shared">
+      <UniqueIdentifier>{997352ad-f1da-4253-89f5-9357866f83fd}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="..\plugin-sdk-source-gen\CSV.cpp">
+      <Filter>shared</Filter>
+    </ClCompile>
+    <ClCompile Include="..\plugin-sdk-source-gen\StringEx.cpp">
+      <Filter>shared</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <functional>
 #include "Type.h"
 #include "..\shared\Games.h"
 #include "Tabs.h"
@@ -23,10 +24,14 @@ public:
     string mModuleName;
     CC mCC = CC_CDECL;
     Type mRetType;
+
     bool mIsConst = false;
     bool mIsEllipsis = false;
-    string mRefsStr;
+    bool mIsOverloaded = false;
+    int mRVOParamIndex = -1;
+    unsigned int mNumParamsToSkipForWrapper = 0;
     string mComment;
+    string mType;
 
     struct Parameter {
         string mName;
@@ -37,12 +42,20 @@ public:
 
     struct ExeVersionInfo {
         unsigned int mAddress = 0;
+        string mRefsStr;
     };
 
     ExeVersionInfo mVersionInfo[Games::GetMaxGameVersions()];
 
-    string GetFullName(); // combine name + scope
+    string GetFullName() const; // combine name + scope
+
+    void ForAllParameters(std::function<void(Parameter &p, bool first, bool last)> callback, unsigned int startParam = 0);
+    void ForAllParameters(std::function<void(Parameter &p)> callback, unsigned int startParam = 0);
+    void ForAllParameters(std::function<void(Parameter &p, unsigned int index)> callback, unsigned int startParam = 0);
 
     void WriteDefinition(ofstream &stream, tabs t, Games::IDs game);
-    void WriteDeclaration(ofstream &stream, tabs t, Games::IDs game, bool isStatic);
+    void WriteDeclaration(ofstream &stream, tabs t, Games::IDs game);
+    void WriteMeta(ofstream &stream, tabs t, Games::IDs game);
+
+    string NameForWrapper(Games::IDs game, bool definition);
 };

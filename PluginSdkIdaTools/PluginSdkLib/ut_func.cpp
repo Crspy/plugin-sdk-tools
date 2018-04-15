@@ -1,5 +1,6 @@
 #include "ut_func.h"
 #include "ut_string.h"
+#include "ut_ida.h"
 
 Function const *Function::Find(qstring const &name, qvector<Function> const &entries) {
     for (Function const &i : entries) {
@@ -13,14 +14,16 @@ qvector<Function> Function::FromCSV(char const *filepath) {
     qvector<Function> entries;
     auto inFile = qfopen(filepath, "rt");
     if (inFile) {
-        static char line[1024];
-        if (qfgets(line, 1024, inFile)) {
-            while (qfgets(line, 1024, inFile)) {
+        qstring line;
+        if (getLine(&line, inFile)) {
+            while (getLine(&line, inFile)) {
                 Function entry;
-                qstring addr, isConstStr, paramsStr;
+                qstring addr, isConstStr, paramsStr, priority;
                 readcsv(line, addr, entry.m_module, entry.m_name, entry.m_demangledName, entry.m_type,
-                    entry.m_cc, entry.m_retType, paramsStr, isConstStr, entry.m_refsStr, entry.m_comment);
+                    entry.m_cc, entry.m_retType, paramsStr, isConstStr, entry.m_refsStr, entry.m_comment,
+                    priority);
                 entry.m_address = toNumber(addr);
+                entry.m_priority = toNumber(priority);
                 entry.m_isConst = isConstStr != "0";
                 // raw CPool<CPed> *:pool int:value
                 // [raw] Type : Name
@@ -67,10 +70,10 @@ qvector<Function> Function::FromReferenceCSV(char const *filepath, qvector<Funct
     if (baseCount > 0) {
         auto inFile = qfopen(filepath, "rt");
         if (inFile) {
-            static char line[1024];
-            if (qfgets(line, 1024, inFile)) {
+            qstring line;
+            if (getLine(&line, inFile)) {
                 unsigned int counter = 0;
-                while (qfgets(line, 1024, inFile)) {
+                while (getLine(&line, inFile)) {
                     counter++;
                     if (baseCount < counter) {
                         entries.clear();
@@ -82,8 +85,8 @@ qvector<Function> Function::FromReferenceCSV(char const *filepath, qvector<Funct
                     int intAddrBase = toNumber(addrBase);
                     int intAddrRef = toNumber(addrRef);
                     if (intAddrBase != baseFuncs[counter - 1].m_address) {
-                        warning("Address '0x%X' in reference file doesn't match with address ('0x%X') in base file ('%s')",
-                            intAddrBase, baseFuncs[counter - 1].m_address, filepath);
+                        warning("Address '0x%X' in reference file doesn't match with address ('0x%X') in base file ('%s')\non line %d",
+                            intAddrBase, baseFuncs[counter - 1].m_address, filepath, counter);
                         wrongAddresses = true;
                         break;
                     }
@@ -110,7 +113,7 @@ bool Function::ToCSV(qvector<Function> const &entries, char const *filepath, cha
     auto outFile = qfopen(filepath, "wt");
     if (outFile) {
         // header
-        qfprintf(outFile, "%s,Module,Name,DemangledName,Type,CC,RetType,Parameters,IsConst,Refs,Comment\n", version);
+        qfprintf(outFile, "%s,Module,Name,DemangledName,Type,CC,RetType,Parameters,IsConst,Refs,Comment,Priority\n", version);
         // entries
         for (auto const &i : entries) {
             qstring retType;
@@ -134,8 +137,8 @@ bool Function::ToCSV(qvector<Function> const &entries, char const *filepath, cha
                 if (p != (i.m_params.size() - 1))
                     parameters += ' ';
             }
-            qfprintf(outFile, "%s,%d,%s,%s\n", csvvalue(parameters).c_str(), i.m_isConst, csvvalue(i.m_refsStr).c_str(),
-                csvvalue(i.m_comment).c_str());
+            qfprintf(outFile, "%s,%d,%s,%s,%d\n", csvvalue(parameters).c_str(), i.m_isConst, csvvalue(i.m_refsStr).c_str(),
+                csvvalue(i.m_comment).c_str(), i.m_priority);
         }
         qfclose(outFile);
         return true;

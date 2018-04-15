@@ -286,8 +286,8 @@ vector<Token> GetTokens(string const &line) {
     return result;
 }
 
-string Type::GetFullType() const {
-    return BeforeName() + AfterName();
+string Type::GetFullType(bool leaveSpaceAtTheEnd) const {
+    return BeforeName(leaveSpaceAtTheEnd) + AfterName();
 }
 
 string Type::GetFullTypeRemovePointer() {
@@ -307,8 +307,16 @@ bool Type::IsTemplate() const {
     return mTemplateTypes.size() > 0;
 }
 
-string Type::BeforeName() const {
-    string result = mName;
+string Type::BeforeName(bool leaveSpaceAtTheEnd) const {
+    string result;
+    if (mIsFunction) {
+        if (mFunctionRetType)
+            result = mFunctionRetType->GetFullType(false);
+        else
+            result = "void";
+    }
+    else
+        result = mName;
     if (IsTemplate()) {
         result += '<';
         for (size_t i = 0; i < mTemplateTypes.size(); i++) {
@@ -336,16 +344,16 @@ string Type::BeforeName() const {
         }
         result += mFunctionOrArrayPointers;
     }
-    if (!mIsFunction && !mIsPointerToFixedSizeArray && mPointers.size() == 0)
+    if (leaveSpaceAtTheEnd && !mIsFunction && !mIsPointerToFixedSizeArray && mPointers.size() == 0)
         result += ' ';
     return result;
 }
 
-string Type::AfterName() const {
+string Type::AfterName(bool includeArrays) const {
     string result;
     if (mIsPointerToFixedSizeArray)
         result += ')';
-    if (mArraySize[0] > 0) {
+    if (includeArrays && mArraySize[0] > 0) {
         result += '[' + to_string(mArraySize[0]) + ']';
         if (mArraySize[1] > 0)
             result += '[' + to_string(mArraySize[1]) + ']';

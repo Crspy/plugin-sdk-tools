@@ -14,7 +14,7 @@ void Generator::Generate(path const &sdkpath) {
         cout << "Reading GTA " << Games::GetGameAbbr(Games::ToID(i)) << endl;
         ReadGame(modules, sdkpath, Games::ToID(i));
         ReadHierarchy(sdkpath, Games::ToID(i), modules);
-        GvsMacroGenerator::Generate(sdkpath, Games::ToID(i));
+        // GvsMacroGenerator::Generate(sdkpath, Games::ToID(i));
         cout << "Writing modules for GTA " << Games::GetGameAbbr(Games::ToID(i)) << endl;
         WriteModules(sdkpath, Games::ToID(i), modules);
     }
@@ -250,8 +250,9 @@ void Generator::ReadGame(vector<Module> &modules, path const &sdkpath, Games::ID
                 if (i == 0) {
                     for (string const &csvLine : csvLines) {
                         // 10us,Module,Name,DemangledName,Type,CC,RetType,Parameters,IsConst,Comment
-                        string fnAddress, fnModuleName, fnName, fnDemName, fnType, fnCC, fnRetType, fnParameters, fnIsConst, fnRefsStr, fnComment;
-                        CSV::Read(csvLine, fnAddress, fnModuleName, fnName, fnDemName, fnType, fnCC, fnRetType, fnParameters, fnIsConst, fnRefsStr, fnComment);
+                        string fnAddress, fnModuleName, fnName, fnDemName, fnType, fnCC, fnRetType, fnParameters, fnIsConst, fnRefsStr, fnComment, fnPriority;
+                        CSV::Read(csvLine, fnAddress, fnModuleName, fnName, fnDemName, fnType, fnCC, fnRetType, fnParameters, fnIsConst, fnRefsStr, fnComment,
+                            fnPriority);
                         if (!fnModuleName.empty()) {
                             // get module for this function
                             Module *m = Module::Find(modules, fnModuleName);
@@ -302,6 +303,7 @@ void Generator::ReadGame(vector<Module> &modules, path const &sdkpath, Games::ID
                                 newFn.mIsEllipsis = isEllipsis;
                                 newFn.mIsConst = String::ToNumber(fnIsConst);
                                 newFn.mComment = fnComment;
+                                newFn.mPriority = String::ToNumber(fnPriority);
                                 string retType = fnRetType;
                                 if (String::StartsWith(retType, "raw "))
                                     retType = retType.substr(4);
@@ -392,6 +394,7 @@ void Generator::ReadGame(vector<Module> &modules, path const &sdkpath, Games::ID
                                         Function *pf = m.GetFunction(baseAddress);
                                         if (pf) {
                                             pf->mVersionInfo[i].mAddress = refAddress;
+                                            pf->mVersionInfo[i].mRefsStr = fnRefsList;
                                             break;
                                         }
                                     }
